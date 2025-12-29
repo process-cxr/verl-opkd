@@ -97,9 +97,12 @@ class DataParallelOPKDActor(DataParallelPPOActor):
         self.use_power_weighting = bool(config.get("use_power_weighting", True))
         print(f"[DataParallelOPKDActor] use_power_weighting={self.use_power_weighting}")
         self.power_alpha = float(config.get("power_alpha", 1.0))
+
+        self.coverage_coef = float(config.get("coverage_coef", 1.0))
         print(
             f"[DataParallelOPKDActor] Config: topk={self.topk}, "
-            f"jsd_alpha={self.jsd_alpha}, kd_loss_type={self.kd_loss_type}, power_alpha={self.power_alpha}"
+            f"jsd_alpha={self.jsd_alpha}, kd_loss_type={self.kd_loss_type}, "
+            f"power_alpha={self.power_alpha}, coverage_coef={self.coverage_coef}"
         )
 
     def _forward_micro_batch_teacher(self, micro_batch, temperature, calculate_entropy=False):
@@ -502,22 +505,6 @@ class DataParallelOPKDActor(DataParallelPPOActor):
                     entropy_s_mean = (entropy_student_tok * response_mask).sum().item() / denom_plain.item()
                     entropy_t_mean = (entropy_teacher_tok * response_mask).sum().item() / denom_plain.item()
 
-                    # plain: 所有 token 均匀平均的 reverse KL
-                    plain_kl_r = (kl_reverse * response_mask).sum() / denom_plain
-
-                    # plain: 所有 token 均匀平均的 loss_tok（= KL + coverage）
-                    plain_loss_tok = (loss_tok * response_mask).sum() / denom_plain
-
-                    # weighted: 用 weighted_mask 的 reverse KL 和 loss_tok
-                    weighted_kl_r = (kl_reverse * weighted_mask).sum() / denom_weighted
-                    weighted_loss_tok = (loss_tok * weighted_mask).sum() / denom_weighted  # 这就是 loss 本体
-
-                    append_to_dict(metrics, {
-                        "actor/dbg_plain_kl_reverse_mean": plain_kl_r.detach().item(),
-                        "actor/dbg_plain_loss_tok_mean": plain_loss_tok.detach().item(),
-                        "actor/dbg_weighted_kl_reverse_mean": weighted_kl_r.detach().item(),
-                        "actor/dbg_weighted_loss_tok_mean": weighted_loss_tok.detach().item(),
-                    })
                     append_to_dict(
                         metrics,
                         {
